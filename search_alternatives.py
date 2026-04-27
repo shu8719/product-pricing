@@ -26,14 +26,14 @@ def load_clean_data(path: Path = INPUT_CSV) -> pd.DataFrame:
     """Load and validate the cleaned capacitor CSV."""
     if not path.exists():
         raise FileNotFoundError(
-            f"{path} not found. Run `python clean_csv.py` first."
+            f"{path} が見つかりません。先に `python clean_csv.py` を実行してください。"
         )
 
     df = pd.read_csv(path, encoding="utf-8-sig")
     missing = REQUIRED_COLUMNS - set(df.columns)
     if missing:
         raise ValueError(
-            f"Missing required columns in {path}: {sorted(missing)}"
+            f"{path} に必要な列が不足しています: {sorted(missing)}"
         )
 
     # Ensure numeric columns are in numeric dtype.
@@ -48,11 +48,11 @@ def find_original_part(df: pd.DataFrame, part_number: str) -> pd.Series:
     """Find the original part by exact part number (case-insensitive)."""
     normalized = part_number.strip().upper()
     if not normalized:
-        raise ValueError("Part number is empty.")
+        raise ValueError("品番が空です。")
 
     matched = df[df["part_number"].astype(str).str.upper() == normalized]
     if matched.empty:
-        raise ValueError(f"Part number not found: {part_number}")
+        raise ValueError(f"品番が見つかりません: {part_number}")
     return matched.iloc[0]
 
 
@@ -72,8 +72,8 @@ def build_alternative_table(
     for col in required_for_search:
         if pd.isna(original_part[col]):
             raise ValueError(
-                f"Original part has no usable `{col}` value. "
-                "Please check the cleaned CSV."
+                f"元部品の `{col}` が欠損しています。"
+                "clean後のCSVを確認してください。"
             )
 
     original_part_number = str(original_part["part_number"]).upper()
@@ -111,27 +111,27 @@ def build_alternative_table(
 
 def pretty_print_original(original: pd.Series) -> None:
     """Print base part information in CLI."""
-    print("\n=== Original Part ===")
-    print(f"Part Number   : {original['part_number']}")
-    print(f"Manufacturer  : {original['manufacturer']}")
-    print(f"Description   : {original['description']}")
-    print(f"Capacitance   : {original['capacitance_uF']} uF")
-    print(f"Voltage       : {original['voltage_V']} V")
-    print(f"Stock         : {original['stock']}")
-    print(f"Unit Price    : {original['price_jpy']} JPY")
-    print(f"Product URL   : {original['product_url']}")
+    print("\n=== 元部品 ===")
+    print(f"品番       : {original['part_number']}")
+    print(f"メーカー   : {original['manufacturer']}")
+    print(f"説明       : {original['description']}")
+    print(f"容量       : {original['capacitance_uF']} uF")
+    print(f"耐圧       : {original['voltage_V']} V")
+    print(f"在庫       : {original['stock']}")
+    print(f"単価       : {original['price_jpy']} JPY")
+    print(f"商品URL    : {original['product_url']}")
 
 
 def main() -> int:
     try:
         df = load_clean_data()
     except Exception as exc:
-        print(f"Error: {exc}")
+        print(f"エラー: {exc}")
         return 1
 
-    user_input = input("Enter original part number: ").strip()
+    user_input = input("元部品の品番を入力してください: ").strip()
     if not user_input:
-        print("Error: please enter a part number.")
+        print("エラー: 品番を入力してください。")
         return 1
 
     try:
@@ -141,11 +141,11 @@ def main() -> int:
             df, original, production_qty=DEFAULT_PRODUCTION_QTY
         )
     except Exception as exc:
-        print(f"Error: {exc}")
+        print(f"エラー: {exc}")
         return 1
 
     if alternatives.empty:
-        print("\nNo alternatives found for the selected conditions.")
+        print("\n指定した条件に一致する代替候補は見つかりませんでした。")
         return 0
 
     display_columns = [
@@ -168,7 +168,7 @@ def main() -> int:
     result["saving_rate_percent"] = result["saving_rate_percent"].round(2)
     result["saving_for_lot_jpy"] = result["saving_for_lot_jpy"].round(2)
 
-    print(f"\n=== Alternative Ranking (lot size: {DEFAULT_PRODUCTION_QTY:,}) ===")
+    print(f"\n=== 代替候補ランキング（ロット数: {DEFAULT_PRODUCTION_QTY:,}） ===")
     print(result.to_string(index=False))
     return 0
 

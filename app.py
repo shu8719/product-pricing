@@ -28,37 +28,39 @@ def get_clean_data() -> pd.DataFrame:
 
 
 st.set_page_config(
-    page_title="AI Parts Cross-Reference & Cost Optimizer",
+    page_title="AI部品クロスリファレンス・価格最適化",
     page_icon=":electric_plug:",
     layout="wide",
 )
 
-st.title("AI Parts Cross-Reference & Cost Optimizer")
-st.caption("Local CSV mode: the app reads `capacitors_clean.csv` and does not call Mouser API.")
+st.title("AI部品クロスリファレンス・価格最適化")
+st.caption(
+    "ローカルCSVモード: `capacitors_clean.csv` を読み込み、Mouser APIは呼び出しません。"
+)
 
 try:
     df = get_clean_data()
 except Exception as exc:
-    st.error(f"Failed to load data: {exc}")
-    st.info("Run `python clean_csv.py` first, then reload this page.")
+    st.error(f"データの読み込みに失敗しました: {exc}")
+    st.info("先に `python clean_csv.py` を実行してから、このページを再読み込みしてください。")
     st.stop()
 
 left, right = st.columns([2, 1])
 with left:
     part_number = st.text_input(
-        "Original Part Number",
-        placeholder="Example: MAL214699805E3",
+        "元部品の品番",
+        placeholder="例: MAL214699805E3",
     ).strip()
 with right:
     production_qty = st.number_input(
-        "Production Quantity",
+        "生産数量",
         min_value=1,
         value=DEFAULT_PRODUCTION_QTY,
         step=100,
     )
 
 if not part_number:
-    st.info("Enter a part number to search alternatives.")
+    st.info("代替候補を検索するには品番を入力してください。")
     st.stop()
 
 try:
@@ -67,26 +69,26 @@ except Exception as exc:
     st.error(str(exc))
     st.stop()
 
-st.subheader("Original Part")
+st.subheader("元部品情報")
 
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Capacitance", f"{original['capacitance_uF']} uF")
-col2.metric("Voltage", f"{original['voltage_V']} V")
-col3.metric("Stock", f"{int(original['stock']) if pd.notna(original['stock']) else '-'}")
-col4.metric("Unit Price", format_jpy(original["price_jpy"]))
+col1.metric("容量", f"{original['capacitance_uF']} uF")
+col2.metric("耐圧", f"{original['voltage_V']} V")
+col3.metric("在庫数", f"{int(original['stock']) if pd.notna(original['stock']) else '-'}")
+col4.metric("単価", format_jpy(original["price_jpy"]))
 
 original_info = pd.DataFrame(
     [
-        {"Field": "Part Number", "Value": original["part_number"]},
-        {"Field": "Manufacturer", "Value": original["manufacturer"]},
-        {"Field": "Description", "Value": original["description"]},
-        {"Field": "Product URL", "Value": original["product_url"]},
+        {"項目": "品番", "値": original["part_number"]},
+        {"項目": "メーカー", "値": original["manufacturer"]},
+        {"項目": "説明", "値": original["description"]},
+        {"項目": "商品URL", "値": original["product_url"]},
     ]
 )
 st.dataframe(original_info, hide_index=True, use_container_width=True)
 
 if isinstance(original["product_url"], str) and original["product_url"].strip():
-    st.markdown(f"[Open original product page]({original['product_url']})")
+    st.markdown(f"[元部品の商品ページを開く]({original['product_url']})")
 
 try:
     alternatives = build_alternative_table(
@@ -95,21 +97,21 @@ try:
         production_qty=int(production_qty),
     )
 except Exception as exc:
-    st.error(f"Failed to build alternatives: {exc}")
+    st.error(f"代替候補の作成に失敗しました: {exc}")
     st.stop()
 
-st.subheader("Alternative Ranking")
+st.subheader("代替候補ランキング")
 if alternatives.empty:
-    st.warning("No alternatives found for the selected conditions.")
+    st.warning("指定した条件に一致する代替候補は見つかりませんでした。")
     st.stop()
 
 top = alternatives.iloc[0]
 
 summary_1, summary_2, summary_3 = st.columns(3)
-summary_1.metric("Best Unit Price", format_jpy(top["price_jpy"]))
-summary_2.metric("Unit Saving vs Original", format_jpy(top["unit_saving_jpy"]))
+summary_1.metric("最安単価", format_jpy(top["price_jpy"]))
+summary_2.metric("元部品との差額（単価）", format_jpy(top["unit_saving_jpy"]))
 summary_3.metric(
-    f"Saving for {int(production_qty):,} units",
+    f"{int(production_qty):,} 個生産時の削減額",
     format_jpy(top["saving_for_lot_jpy"]),
 )
 
@@ -132,20 +134,20 @@ st.dataframe(
     hide_index=True,
     use_container_width=True,
     column_config={
-        "part_number": "Part Number",
-        "manufacturer": "Manufacturer",
-        "capacitance_uF": st.column_config.NumberColumn("Capacitance (uF)", format="%.4g"),
-        "voltage_V": st.column_config.NumberColumn("Voltage (V)", format="%.4g"),
-        "stock": st.column_config.NumberColumn("Stock", format="%d"),
-        "price_jpy": st.column_config.NumberColumn("Price (JPY)", format="%.2f"),
-        "unit_saving_jpy": st.column_config.NumberColumn("Unit Saving (JPY)", format="%.2f"),
-        "saving_rate_percent": st.column_config.NumberColumn("Saving Rate (%)", format="%.2f"),
+        "part_number": "品番",
+        "manufacturer": "メーカー",
+        "capacitance_uF": st.column_config.NumberColumn("容量 (uF)", format="%.4g"),
+        "voltage_V": st.column_config.NumberColumn("耐圧 (V)", format="%.4g"),
+        "stock": st.column_config.NumberColumn("在庫数", format="%d"),
+        "price_jpy": st.column_config.NumberColumn("単価 (JPY)", format="%.2f"),
+        "unit_saving_jpy": st.column_config.NumberColumn("単価差額 (JPY)", format="%.2f"),
+        "saving_rate_percent": st.column_config.NumberColumn("削減率 (%)", format="%.2f"),
         "saving_for_lot_jpy": st.column_config.NumberColumn(
-            "Saving for Lot (JPY)", format="%.2f"
+            "ロット削減額 (JPY)", format="%.2f"
         ),
         "product_url": st.column_config.LinkColumn(
-            "Product URL",
-            display_text="Open",
+            "商品URL",
+            display_text="開く",
         ),
     },
 )

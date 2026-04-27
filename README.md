@@ -1,21 +1,52 @@
 # AI部品クロスリファレンス・価格最適化 PoC
 
-このプロジェクトは、Mouserの部品データを使って、コンデンサの品番検索・代替候補検索・価格比較・コスト削減シミュレーションを行う授業用PoCです。
+Mouserの部品データを使って、アルミ電解コンデンサの代替候補検索とコスト削減シミュレーションを行うアプリです。
 
-## ファイル構成
+## 最短で起動する手順
+
+プロジェクト直下で、次の順に実行してください。
+
+```bash
+pip install -r requirements.txt
+python clean_csv.py
+streamlit run app.py
+```
+
+ブラウザで `http://localhost:8501` を開くとアプリが表示されます。  
+CLI版を使う場合は次を実行します。
+
+```bash
+python search_alternatives.py
+```
+
+`python` が使えない環境では `python3` / `pip3` に読み替えてください。
+
+## このプロジェクトで使うファイル
 
 - `fetch_mouser.py`  
-  （任意）Mouser Search APIからデータを取得し、`capacitors.csv` を作成します。`category` 列も保存します。
+  （任意）Mouser Search APIから部品データを取得して `capacitors.csv` を作成します。
 - `clean_csv.py`  
-  `capacitors.csv` を整形し、アルミ電解コンデンサのみを残した `capacitors_clean.csv` を作成します。
+  `capacitors.csv` を整形し、アルミ電解コンデンサのみを残して `capacitors_clean.csv` を作成します。
 - `search_alternatives.py`  
-  CLIで代替候補検索と削減額の試算を行います。
+  ターミナルで品番入力して代替候補を表示するCLIツールです。
 - `app.py`  
-  StreamlitのUIで代替候補検索・ランキング表示・削減額表示を行います。
+  StreamlitのWebアプリです。品番・生産数を入力してランキングと削減額を表示します。
 
-## 入力CSV形式
+## clean_csv.py で追加される列
 
-`capacitors.csv` には以下の列が必要です。
+- `capacitance_uF`
+- `voltage_V`
+- `tolerance_percent`
+- `price_jpy`
+- `stock`
+- `is_aluminum_electrolytic`
+
+アルミ電解判定は次の順で行います。
+
+- `category` の文字列を優先判定
+- `description` の文字列をフォールバック判定
+
+## 入力CSV（capacitors.csv）の必要列
 
 - `part_number`
 - `manufacturer`
@@ -27,79 +58,27 @@
 
 任意（推奨）:
 
-- `category`（`clean_csv.py` でより高精度にフィルタするために利用）
+- `category`（フィルタ精度向上のため）
 
-## セットアップ
+## Mouser APIからデータを再取得する（任意）
 
-```bash
-pip install -r requirements.txt
-```
-
-## 実行方法
-
-1. CSVを整形する
-
-```bash
-python clean_csv.py
-```
-
-`capacitors_clean.csv` に以下の列が追加されます。
-
-- `capacitance_uF`
-- `voltage_V`
-- `tolerance_percent`
-- `price_jpy`
-- `stock`
-- `is_aluminum_electrolytic`
-
-アルミ電解コンデンサ判定ルール:
-
-- 優先1: `category` が「アルミ系 + 電解系」に一致
-- 優先2: `description` が「アルミ系 + 電解系」に一致（フォールバック）
-
-2. CLIで代替候補検索を実行する
-
-```bash
-python search_alternatives.py
-```
-
-品番入力後、以下を表示します。
-
-- 元部品の仕様
-- 代替候補ランキング（安い順）
-- 単価差額
-- 削減率
-- 生産数10,000個時の削減額
-
-3. Streamlitアプリを起動する
-
-```bash
-streamlit run app.py
-```
-
-アプリでは以下を表示します。
-
-- 品番入力欄
-- 生産数入力欄
-- 元部品の仕様
-- 代替候補ランキング
-- コスト削減額
-- `product_url` リンク
-
-## （任意）Mouser APIから最新データ取得
-
-APIキーはコードに直書きせず、環境変数で設定してください。
+APIキーを環境変数に設定して実行します。
 
 ```bash
 export MOUSER_API_KEY="your_key_here"
 python fetch_mouser.py
 ```
 
-これで `capacitors.csv` が更新されます。
+取得条件を変更したい場合:
 
-## 補足
+```bash
+export MOUSER_KEYWORD="aluminum electrolytic capacitor"
+export MOUSER_MAX_RECORDS="300"
+export MOUSER_PAGE_SIZE="50"
+python fetch_mouser.py
+```
 
-- メイン処理（`clean_csv.py` / `search_alternatives.py` / `app.py`）はローカルCSV処理です。
-- アプリはMouser APIを毎回呼び出しません。
-- ファイル欠落・列不足・品番未一致などの基本的なエラー処理を実装しています。
-- 環境によって `python` が使えない場合は `python3` を使用してください。
+## 注意点
+
+- `app.py` は `python app.py` ではなく、必ず `streamlit run app.py` で起動してください。
+- `clean_csv.py` / `search_alternatives.py` / `app.py` はローカルCSVを使うため、通常利用時にMouser APIを繰り返し呼びません。
