@@ -1,16 +1,24 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pandas as pd
 
+from catalog import (
+    extract_capacitance_uf,
+    extract_dimension_pair_mm,
+    extract_lifetime_hours,
+    extract_mount_type,
+    extract_tolerance_percent,
+    extract_voltage_v,
+    is_aluminum_electrolytic_text,
+    parse_price_jpy,
+    parse_stock,
+)
 
-# Input/output file names
+
 INPUT_CSV = Path("capacitors.csv")
 OUTPUT_CSV = Path("capacitors_clean.csv")
-
-# Required columns in the original CSV
 REQUIRED_COLUMNS = {
     "part_number",
     "manufacturer",
@@ -21,87 +29,15 @@ REQUIRED_COLUMNS = {
     "product_url",
 }
 
-# Regex patterns to parse values from description text.
-# Allow variants such as uF / UF / MuF / mF before "F".
-CAPACITANCE_PATTERN = re.compile(
-    r"(\d+(?:\.\d+)?)\s*[A-Za-z]{0,2}\s*F\b", re.IGNORECASE
-)
-VOLTAGE_PATTERN = re.compile(r"(\d+(?:\.\d+)?)\s*V(?:DC)?\b", re.IGNORECASE)
-TOLERANCE_PATTERN = re.compile(r"(?:\+/-)?\s*(\d+(?:\.\d+)?)\s*%")
-NUMBER_PATTERN = re.compile(r"[\d,]+(?:\.\d+)?")
-ALUMINUM_PATTERN = re.compile(r"(アルミ(?:ニウム)?|aluminium?)", re.IGNORECASE)
-ELECTROLYTIC_PATTERN = re.compile(r"(電解|electrolytic)", re.IGNORECASE)
 
-
-def extract_first_float(text: str, pattern: re.Pattern[str]) -> float | None:
-    """Extract the first matching float from text using a regex pattern."""
-    if not text:
-        return None
-    match = pattern.search(text)
-    if not match:
-        return None
-    try:
-        return float(match.group(1))
-    except ValueError:
-        return None
-
-
-def parse_price_jpy(price_text: object) -> float | None:
-    """
-    Convert strings like '¥2,526.5' to float (2526.5).
-    Returns None when conversion is not possible.
-    """
-    if pd.isna(price_text):
-        return None
-    cleaned = re.sub(r"[^\d.]", "", str(price_text))
-    if not cleaned:
-        return None
-    try:
-        return float(cleaned)
-    except ValueError:
-        return None
-
-
-def parse_stock(availability_text: object) -> int | None:
-    """
-    Convert strings like '7,716 In Stock' or '7716 在庫' to integer stock count.
-    Returns None when conversion is not possible.
-    """
-    if pd.isna(availability_text):
-        return None
-    match = NUMBER_PATTERN.search(str(availability_text))
-    if not match:
-        return None
-
-    number_text = match.group(0).replace(",", "")
-    if not number_text:
-        return None
-    try:
-        return int(float(number_text))
-    except ValueError:
-        return None
-
-
-def is_aluminum_electrolytic_text(text: object) -> bool:
-    """
-    Return True when text includes BOTH aluminum and electrolytic keywords.
-    Supports Japanese and English keywords.
-    """
-    if pd.isna(text):
-        return False
-    text_str = str(text)
-    return bool(ALUMINUM_PATTERN.search(text_str) and ELECTROLYTIC_PATTERN.search(text_str))
-
-
-def is_target_aluminum_electrolytic(category_text: object, description_text: object) -> bool:
-    """
-    Priority:
-    1) category match (recommended when available)
-    2) description match (fallback)
-    """
-    category_match = is_aluminum_electrolytic_text(category_text)
-    description_match = is_aluminum_electrolytic_text(description_text)
-    return category_match or description_match
+def is_target_aluminum_electrolytic(
+    category_text: object,
+    description_text: object,
+) -> bool:
+    """Category match first, then description fallback."""
+    return is_aluminum_electrolytic_text(category_text) or is_aluminum_electrolytic_text(
+        description_text
+    )
 
 
 def main() -> int:
@@ -127,15 +63,13 @@ def main() -> int:
     description_series = df["description"].fillna("")
 
     # Parse electrical specs from the free-text description.
-    df["capacitance_uF"] = description_series.apply(
-        lambda text: extract_first_float(text, CAPACITANCE_PATTERN)
-    )
-    df["voltage_V"] = description_series.apply(
-        lambda text: extract_first_float(text, VOLTAGE_PATTERN)
-    )
-    df["tolerance_percent"] = description_series.apply(
-        lambda text: extract_first_float(text, TOLERANCE_PATTERN)
-    )
+    df["capacitance_uF"] = description_series.apply(extract_capacitance_uf)
+    df["voltage_V"] = description_series.apply(extract_voltage_v)
+    df["tolerance_percent"] = description_series.apply(extract_tolerance_percent)
+    sizes = description_series.apply(extract_dimension_pair_mm)
+    df["diameter_mm"] = [pair[0] for pair in sizes]
+    df["height_mm"] = [pair[1] for pair in sizes]
+    df["lifetime_hours"] = description_series.apply(extract_lifetime_hours)
 
     # Parse text fields into numeric fields used by pricing logic.
     df["price_jpy"] = df["price"].apply(parse_price_jpy)
@@ -147,11 +81,18 @@ def main() -> int:
         ),
         axis=1,
     )
+    df["mount_type"] = df.apply(
+        lambda row: extract_mount_type(row.get("category"), row.get("description")),
+        axis=1,
+    )
 
     # Make sure numeric columns are typed as numbers.
     df["capacitance_uF"] = pd.to_numeric(df["capacitance_uF"], errors="coerce")
     df["voltage_V"] = pd.to_numeric(df["voltage_V"], errors="coerce")
     df["tolerance_percent"] = pd.to_numeric(df["tolerance_percent"], errors="coerce")
+    df["diameter_mm"] = pd.to_numeric(df["diameter_mm"], errors="coerce")
+    df["height_mm"] = pd.to_numeric(df["height_mm"], errors="coerce")
+    df["lifetime_hours"] = pd.to_numeric(df["lifetime_hours"], errors="coerce")
     df["price_jpy"] = pd.to_numeric(df["price_jpy"], errors="coerce")
     df["stock"] = pd.to_numeric(df["stock"], errors="coerce").astype("Int64")
 
