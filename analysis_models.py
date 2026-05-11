@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+
+os.environ.setdefault("LOKY_MAX_CPU_COUNT", "1")
 
 import pandas as pd
 from sklearn.cluster import KMeans
 from sklearn.compose import ColumnTransformer
-from sklearn.decomposition import PCA
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import mean_absolute_error, r2_score
@@ -14,15 +16,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
-MARKET_FEATURE_COLUMNS = [
-    "capacitance_uF",
-    "voltage_V",
-    "tolerance_percent",
-    "diameter_mm",
-    "height_mm",
-    "lifetime_hours",
-    "price_jpy",
-]
+MARKET_FEATURE_COLUMNS = ["capacitance_uF", "voltage_V", "tolerance_percent"]
 PRICE_NUMERIC_COLUMNS = [
     "capacitance_uF",
     "voltage_V",
@@ -54,13 +48,13 @@ def _cluster_count(row_count: int) -> int:
 
 
 def build_market_map_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """Return a DataFrame with PCA coordinates and cluster labels."""
-    model_df = df.dropna(subset=["capacitance_uF", "voltage_V", "price_jpy"]).copy()
+    """Return a DataFrame with 3-axis market-map coordinates and cluster labels."""
+    model_df = df.dropna(subset=MARKET_FEATURE_COLUMNS).copy()
+    model_df = model_df[model_df["mount_type"].notna()].copy()
     if len(model_df) < 8:
         raise ValueError("市場マップを作るには十分なデータがありません。")
 
     feature_frame = model_df[MARKET_FEATURE_COLUMNS].apply(pd.to_numeric, errors="coerce")
-    feature_frame = feature_frame.fillna(feature_frame.median(numeric_only=True))
 
     scaled = StandardScaler().fit_transform(feature_frame)
     kmeans = KMeans(
@@ -69,13 +63,10 @@ def build_market_map_frame(df: pd.DataFrame) -> pd.DataFrame:
         random_state=42,
     )
     labels = kmeans.fit_predict(scaled)
-    pca = PCA(n_components=2, random_state=42)
-    coords = pca.fit_transform(scaled)
 
     plotted = model_df.copy()
-    plotted["pc1"] = coords[:, 0]
-    plotted["pc2"] = coords[:, 1]
     plotted["cluster"] = [f"Cluster {label + 1}" for label in labels]
+    plotted.attrs["used_features"] = MARKET_FEATURE_COLUMNS
     return plotted
 
 
